@@ -1,0 +1,46 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=2824
+
+git repository:   http://github.com/c9s/libperl.vim
+
+
+you can just call those function by:
+
+let retsult = libperl#whatever_function(  arg , arg2 )
+
+functions:
+
+fun! libperl#echo(msg)
+fun! libperl#get_perl_lib_paths()
+fun! libperl#get_module_file_path(mod)
+fun! libperl#tab_open_module_file_in_paths(mod)
+fun! libperl#tab_open_tag(tag)
+fun! libperl#translate_module_name(n)
+fun! libperl#open_tag(tag)
+fun! libperl#open_module()
+fun! libperl#get_cursor_module_name()
+fun! libperl#get_cursor_method_name()
+fun! libperl#find_method(method_name)
+fun! libperl#edit_file(fullpath,method)
+fun! libperl#tab_edit_file(fullpath,method)
+fun! libperl#tab_open_module_from_cursor()
+fun! libperl#open_module_in_paths(mod)
+fun! libperl#get_inc()
+fun! libperl#find_perl_package_files()
+fun! libperl#install_module()
+fun! libperl#get_package_sourcelist_path()
+fun! libperl#find_base_classes(file)
+fun! libperl#grep_file_functions(file)
+fun! libperl#parse_base_class_functions(filepath)
+fun! libperl#get_method_comp_refer_start()
+fun! libperl#get_method_comp_refer_base()
+fun! libperl#get_method_comp_start()
+fun! libperl#get_method_comp_base()
+fun! libperl#clear_method_comp_base()
+fun! libperl#get_pkg_comp_start()
+fun! libperl#get_pkg_comp_base()
+fun! libperl#use_ok(pkg)
+fun! libperl#get_cpan_module_list(force)
+fun! libperl#get_installed_cpan_module_list(force)
+fun! libperl#get_currentlib_cpan_module_list(force)
+fun! libperl#get_current_lib_package_name()
+
