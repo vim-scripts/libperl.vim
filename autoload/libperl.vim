@@ -1,3 +1,4 @@
+
 " vim:fdm=syntax:fdl=0:
 "
 " libperl.vim
@@ -7,7 +8,7 @@
 " Web:    http://oulixe.us
 " Github: http://github.com/c9s
 " Mail:   cornelius.howl@DELETE-ME.gmail.com
-"
+" Version: 0.6
 
 " Script Variables:
 " 
@@ -34,9 +35,18 @@
 let g:libperl#lib_version = 0.3
 let g:libperl#pkg_token_pattern = '\w[a-zA-Z0-9:_]\+'
 
+" expiry by min
+fu! s:is_expired(file,expiry)
+  let lt = localtime( )
+  let ft = getftime( expand( a:file ) )
+  let dist = lt - ft
+  return dist > a:expiry * 60 
+endf
 
-" libperl#echo:
-"   @msg[String]:
+fun! libperl#get_inc()
+  echoerr "libperl#get_inc is deprecated."
+  return ""
+endf
 
 fun! libperl#echo(msg)
   redraw
@@ -48,8 +58,17 @@ endf
 "       return paths from perl @INC 
 
 fun! libperl#get_perl_lib_paths()
-  return split( system('perl -e ''print join "\n",@INC''') , "\n" ) 
+  if &filetype && &filetype == 'perl'
+    let l:path = &path
+    if strlen(l:path) > 1 
+      return split( l:path , ',')
+    endif
+  else
+    return split( system('perl -e ''print join "\n",@INC''') , "\n" ) 
+  endif
 endf
+
+
 
 " libperl#get_module_file_path :
 "   @mod[String]: package name
@@ -88,7 +107,9 @@ endf
 fun! libperl#tab_open_tag(tag)
   let list = taglist( a:tag )
   if len(list) == 1 | exec 'tab tag ' . a:tag
-  else | exec 'tab ts ' . a:tag | endif
+  else 
+    exec 'tab ts ' . a:tag 
+  endif
 endf
 
 " libperl#translate_module_name : 
@@ -106,8 +127,11 @@ endf
 fun! libperl#open_tag(tag)
   resize 60 
   let list = taglist( a:tag )
-  if len(list) == 1 | exec ' tag ' . a:tag
-  else | exec ' ts ' . a:tag | endif
+  if len(list) == 1 
+    exec ' tag ' . a:tag
+  else 
+    exec ' ts ' . a:tag 
+  endif
 endf
 
 " libperl#open_module : 
@@ -194,16 +218,11 @@ fun! libperl#open_module_in_paths(mod)
   echomsg "No such module: " . a:mod
 endf
 
-" libperl#get_inc : 
- 
-fun! libperl#get_inc()
-  return system('perl -e ''print join(" ",@INC)'' ')
-endf
 
 " libperl#find_perl_package_files : 
  
 fun! libperl#find_perl_package_files()
-  let paths = 'lib ' .  libperl#get_inc()
+  let paths = 'lib ' .  join(libperl#get_perl_lib_paths(),' ')
   let pkgs = split("\n" , system(  'find ' . paths . ' -type f -iname *.pm ' 
         \ . " | xargs -I{} egrep -o 'package [_a-zA-Z0-9:]+;' {} "
         \ . " | perl -pe 's/^package (.*?);/\$1/' "
@@ -242,17 +261,29 @@ endf
 "   return a list , each item contains two items : [ class , file ].
 "
 "   @file: 
- 
+
+" XXX: er, this script is in cpan.vim , we should note that
 fun! libperl#find_base_classes(file)
-  let script_path = expand('$HOME') . '/.vim/bin/find_base_classes.pl'
+  let script_path = expand('~/.vim/bin/find_base_classes.pl')  "XXX: should be able to be found in $PATH
   if ! filereadable( script_path )
     echoerr 'can not read ' . script_path
     return [ ]
   endif
-  let out = system('perl ' . script_path . ' ' . a:file)
+
+  let cmd = join(['perl' , script_path , a:file ], ' ')
+  let out = system( cmd )
+
+  if v:shell_error
+    echo 'shell error:' . v:shell_error
+    echo 'syntax error can not parse file:' . a:file 
+    echo cmd
+    sleep 5
+    return 
+  endif
+  
   let classes = [ ]
   for l in split(out,"\n") 
-    let [class,refer,path] = split(l,' ')
+    let [class,refer,path] = split(l,' ',1)  " 1 for keepempty
     call add(classes,[class,refer,path])
   endfor
   return classes
@@ -263,7 +294,8 @@ endf
 "   @file: 
  
 fun! libperl#grep_file_functions(file)
-  let out = system('grep -oP "(?<=^sub )\w+" ' . a:file )
+  "let out = system('grep -oP "(?<=^sub )\w+" ' . a:file )
+  let out = system('grep -oE "?^sub \w+" ' . a:file . " |  sed -e \"s/^sub //\""  )
   return split( out , "\n" )
 endf
 
@@ -363,81 +395,128 @@ endf
 
 
 " libperl#get_cpan_module_list : 
-"   @force: 
+"   @force: override cache
 " 
 "   Return: cpan module list [list]
- 
+
+let g:cpan_mod_cachef = expand('~/.vim-cpan-module-cache')
+let g:cpan_ins_mod_cachef = expand('~/.vim-cpan-installed-module-cache')
+let g:cpan_cache_expiry = 60 * 24 * 14
+
 fun! libperl#get_cpan_module_list(force)
-  if a:force || ! filereadable( g:cpan_source_cache ) && IsExpired( g:cpan_source_cache , g:cpan_cache_expiry  )
-    let path =  libperl#get_package_sourcelist_path()
-    if filereadable( path ) 
-      cal libperl#echo("executing zcat: " . path )
-      let cmd = 'cat ' . path . " | gunzip | grep -v '^[0-9a-zA-Z-]*: '  | cut -d' ' -f1 > " . g:cpan_source_cache 
-      let out = system( cmd )
-      if out 
-        echoerr out
-      endif
-      cal libperl#echo("cached: " . g:cpan_source_cache )
-    else 
-      echoerr "can not found sources from: " . path
-    endif
+  " check runtime cache
+  if a:force == 0 && exists('g:cpan_mod_cache')
+    retu g:cpan_mod_cache
   endif
-  return readfile( g:cpan_source_cache )
+
+  " check file cache if we define a cache filename
+  if exists('g:cpan_mod_cachef')
+        \ && a:force == 0 
+        \ && filereadable(g:cpan_mod_cachef) 
+        \ && ! s:is_expired( g:cpan_mod_cachef , g:cpan_cache_expiry )  
+
+      let g:cpan_mod_cache = readfile( g:cpan_mod_cachef )
+      return g:cpan_mod_cache
+  endif
+
+  let path =  libperl#get_package_sourcelist_path()
+  if filereadable( path ) 
+    cal libperl#echo("executing zcat: " . path )
+    let cmd = 'cat ' . path . " | gunzip | grep -v '^[0-9a-zA-Z-]*: '  | cut -d' ' -f1 > " . g:cpan_mod_cachef
+    cal system( cmd )
+    if v:shell_error 
+      echoerr v:shell_error
+    endif
+    cal libperl#echo("cached: " . g:cpan_mod_cachef )
+  endif
+  let g:cpan_mod_cache = readfile( g:cpan_mod_cachef )
+  return g:cpan_mod_cache
 endf
 
-" libperl#get_installed_cpan_module_list : 
-"   @force: 
-" 
-"   Return: installed cpan module list [list]
- 
+fun! libperl#get_cpan_installed_module_list(force)
+  " check runtime cache
+  if a:force == 0 && exists('g:cpan_ins_mod_cache')
+    echomsg 'runtime cache'
+    return g:cpan_ins_mod_cache
+  endif
+
+  if exists('g:cpan_ins_mod_cachef')
+        \ && a:force == 0 
+        \ && filereadable( g:cpan_ins_mod_cachef ) 
+        \ && ! s:is_expired( g:cpan_ins_mod_cachef , g:cpan_cache_expiry )
+      let g:cpan_ins_mod_cache = readfile( g:cpan_ins_mod_cachef )
+      return g:cpan_ins_mod_cache
+  endif
+
+  " update cache
+  let paths = 'lib ' . join(libperl#get_perl_lib_paths(),' ')
+  cal libperl#echo("finding packages from @INC... This might take a while. Press Ctrl-C to stop.")
+  cal system( 'find ' . paths . ' -type f -iname "*.pm" ' 
+        \ . " | xargs -I{} head {} | egrep -o 'package [_a-zA-Z0-9:]+;' "
+        \ . " | perl -pe 's/^package (.*?);/\$1/' "
+        \ . " | sort | uniq > " . g:cpan_ins_mod_cachef )
+
+  if v:shell_error 
+    echoerr v:shell_error
+  endif
+  cal libperl#echo("ready")
+
+  let g:cpan_ins_mod_cache = readfile( g:cpan_ins_mod_cachef )
+  return g:cpan_ins_mod_cache
+endf
+
+" deprecated function
 fun! libperl#get_installed_cpan_module_list(force)
-  if ! filereadable( g:cpan_installed_cache ) && IsExpired( g:cpan_installed_cache , g:cpan_cache_expiry ) || a:force
-    let paths = 'lib ' .  system('perl -e ''print join(" ",@INC)''  ')
-    call libperl#echo("finding packages from @INC... This might take a while. Press Ctrl-C to stop.")
-    call system( 'find ' . paths . ' -type f -iname "*.pm" ' 
-          \ . " | xargs -I{} head {} | egrep -o 'package [_a-zA-Z0-9:]+;' "
-          \ . " | perl -pe 's/^package (.*?);/\$1/' "
-          \ . " | sort | uniq > " . g:cpan_installed_cache )
-    " sed  's/^package //' | sed 's/;$//'
-    call libperl#echo("ready")
-  endif
-  return readfile( g:cpan_installed_cache )
+  return libperl#get_cpan_installed_module_list(a:force)
 endf
 
-" libperl#get_currentlib_cpan_module_list : 
-"   @force: 
-" 
-"   Return: current lib/ cpan module list [list]
- 
+
+" XXX: windows 
 fun! libperl#get_currentlib_cpan_module_list(force)
-  let cpan_curlib_cache = expand( '~/.vim/' . tolower( substitute( getcwd() , '/' , '.' , 'g') ) )
-  if ! filereadable( cpan_curlib_cache ) && IsExpired( cpan_curlib_cache , g:cpan_cache_expiry ) || a:force
-    call libperl#echo( "finding packages... from lib/" )
-
-    if exists('use_pcre_grep') 
-      call system( 'find lib -type f -iname "*.pm" ' 
-          \ . " | xargs -I{} grep -Po '(?<=package) [_a-zA-Z0-9:]+' {} "
-          \ . " | sort | uniq > " . cpan_curlib_cache )
-    else
-      call system( 'find lib -type f -iname "*.pm" ' 
-          \ . " | xargs -I{} egrep -o 'package [_a-zA-Z0-9:]+;' {} "
-          \ . " | perl -pe 's/^package (.*?);/\$1/' "
-          \ . " | sort | uniq > " . cpan_curlib_cache )
-    endif
-
-    call libperl#echo('cached')
-  endif
-  return readfile( cpan_curlib_cache )
+  return libperl#get_path_module_list(getcwd().'/lib',a:force)
 endf
 
+fun! libperl#get_path_module_list(path,force)
+  let cache_name = a:path
+  let cache_name =  tolower( substitute( cache_name , '/' , '.' , 'g') )
+  let cpan_path_cachef = expand( '~/.vim' ) . cache_name
 
+  " cache for differnet path
+  if a:force == 0 && exists('g:cpan_path_cache') && exists('g:cpan_path_cache[ a:path ]') 
+    return g:cpan_path_cache[ a:path ]
+  endif
+
+  if ! exists('g:cpan_path_cache') 
+    let g:cpan_path_cache = { }
+  endif
+
+  if a:force == 0 && filereadable( cpan_path_cachef ) && ! s:is_expired( cpan_path_cachef , g:cpan_cache_expiry )
+    let g:cpan_path_cache[ a:path ] = readfile( cpan_path_cachef )
+    return g:cpan_path_cache[ a:path ]
+  endif
+
+  cal libperl#echo( "finding packages... from " . a:path )
+
+  if exists('use_pcre_grep') 
+    call system( 'find '.a:path.' -type f -iname "*.pm" ' 
+        \ . " | xargs -I{} grep -Po '(?<=package) [_a-zA-Z0-9:]+' {} "
+        \ . " | sort | uniq > " . cpan_path_cachef )
+  else
+    call system( 'find '.a:path.' -type f -iname "*.pm" ' 
+        \ . " | xargs -I{} egrep -o 'package [_a-zA-Z0-9:]+;' {} "
+        \ . " | perl -pe 's/^package (.*?);/\$1/' "
+        \ . " | sort | uniq > " . cpan_path_cachef )
+  endif
+  cal libperl#echo('cached')
+
+  let g:cpan_path_cache[ a:path ] = readfile( cpan_path_cachef )
+  return g:cpan_path_cache[ a:path ]
+endf
 
 " libperl#get_current_lib_package_name 
-"
 fun! libperl#get_current_lib_package_name()
   let f = expand('%')
-  let pkg = substitute(matchstr(f ,'\(lib/\)\@<=.*\(.pm\)\@='),'/','::','g')
-  return pkg
+  return substitute(matchstr(f ,'\(lib/\)\@<=.*\(.pm\)\@='),'/','::','g')
 endf
 
 " if vim compiled with perl
