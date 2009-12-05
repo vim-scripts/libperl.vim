@@ -8,7 +8,7 @@
 " Web:    http://oulixe.us
 " Github: http://github.com/c9s
 " Mail:   cornelius.howl@DELETE-ME.gmail.com
-" Version: 0.6
+" Version: 0.71
 
 " Script Variables:
 " 
@@ -32,7 +32,7 @@
 "     g:cpan_installed_cache : 
 "     g:cpan_cache_expiry : 
  
-let g:libperl#lib_version = 0.3
+let g:libperl#lib_version = 0.7
 let g:libperl#pkg_token_pattern = '\w[a-zA-Z0-9:_]\+'
 
 " expiry by min
@@ -274,11 +274,9 @@ fun! libperl#find_base_classes(file)
   let out = system( cmd )
 
   if v:shell_error
-    echo 'shell error:' . v:shell_error
-    echo 'syntax error can not parse file:' . a:file 
-    echo cmd
-    sleep 5
-    return 
+    echoerr 'shell error:' . v:shell_error
+    echoerr 'syntax error can not parse file:' . a:file 
+    return []
   endif
   
   let classes = [ ]
@@ -401,7 +399,7 @@ endf
 
 let g:cpan_mod_cachef = expand('~/.vim-cpan-module-cache')
 let g:cpan_ins_mod_cachef = expand('~/.vim-cpan-installed-module-cache')
-let g:cpan_cache_expiry = 60 * 24 * 14
+let g:cpan_cache_expiry = 60 * 24 * 20
 
 fun! libperl#get_cpan_module_list(force)
   " check runtime cache
@@ -479,7 +477,13 @@ endf
 fun! libperl#get_path_module_list(path,force)
   let cache_name = a:path
   let cache_name =  tolower( substitute( cache_name , '/' , '.' , 'g') )
-  let cpan_path_cachef = expand( '~/.vim' ) . cache_name
+
+  let cache_dir = expand('~/.vim/cache/')
+  if ! isdirectory( cache_dir )
+    cal mkdir( cache_dir )
+  endif
+
+  let cpan_path_cachef = cache_dir . cache_name
 
   " cache for differnet path
   if a:force == 0 && exists('g:cpan_path_cache') && exists('g:cpan_path_cache[ a:path ]') 
